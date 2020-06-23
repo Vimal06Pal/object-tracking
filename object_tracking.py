@@ -1,104 +1,121 @@
-# import cv2 
-# import numpy as np
-# car_cascade = cv2.CascadeClassifier('./data/Haarcascades/haarcascade_car.xml')
+''' program to track object '''
+from __future__ import print_function
+import sys
+import cv2
+from random import randint
 
+trackerTypes = ['BOOSTING', 'MIL', 'KCF','TLD', 'MEDIANFLOW', 'GOTURN', 'MOSSE', 'CSRT']
 
-# cap = cv2.VideoCapture("./data/cars.avi")
-# # take the first frame of the video
-# ret , frame = cap.read()
-# g = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-# carss = car_cascade.detectMultiScale( g, 1.1, 1)
-# print(carss[0])
-# # for (x,y,w,h) in carss:
-# #     print(x,y,w,h)
+def createTrackerByName(trackerType):
+  # Create a tracker based on tracker name
+  if trackerType == trackerTypes[0]:
+    tracker = cv2.TrackerBoosting_create()
+  elif trackerType == trackerTypes[1]: 
+    tracker = cv2.TrackerMIL_create()
+  elif trackerType == trackerTypes[2]:
+    tracker = cv2.TrackerKCF_create()
+  elif trackerType == trackerTypes[3]:
+    tracker = cv2.TrackerTLD_create()
+  elif trackerType == trackerTypes[4]:
+    tracker = cv2.TrackerMedianFlow_create()
+  elif trackerType == trackerTypes[5]:
+    tracker = cv2.TrackerGOTURN_create()
+  elif trackerType == trackerTypes[6]:
+    tracker = cv2.TrackerMOSSE_create()
+  elif trackerType == trackerTypes[7]:
+    tracker = cv2.TrackerCSRT_create()
+  else:
+    tracker = None
+    print('Incorrect tracker name')
+    print('Available trackers are:')
+    for t in trackerTypes:
+      print(t)
+    
+  return tracker
 
+if __name__ == '__main__':
 
+  print("Default tracking algoritm is CSRT \n"
+        "Available tracking algorithms are:\n")
+  for t in trackerTypes:
+      print(t)      
 
-# track_window = carss[3] 
-# x,y,width,height=  carss[0] 
+  trackerType = "CSRT"      
 
-
-# roi = frame[y:y+height,x:x+width]
+  # Set video to load
+  videoPath = "../New folder/opencv/opencv/opencv_item/data/slow_traffic_small.mp4"
+  
+  # Create a video capture object to read videos
+  cap = cv2.VideoCapture(videoPath)
  
-# hsv_roi = cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
-# mask = cv2.inRange(hsv_roi,np.array((0., 60., 32.)),np.array((180., 255., 255)))
-# roi_hist = cv2.calcHist([hsv_roi],[0],mask,[180],[0,180])
-# cv2.normalize(roi_hist, roi_hist,0,255, cv2.NORM_MINMAX)
-# term_crit = ( cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1 )
-# cv2.imshow('roi',roi)
-# while(1):
-#     ret , frame = cap.read()
-#     if ret == True:
-#         # frame = cv2.resize(frame, 520,dsize=5)
-#         hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV) 
-#         dst = cv2.calcBackProject([hsv],[0],roi_hist,[0,180],1)
-#         ret, track_window = cv2.meanShift(dst, track_window, term_crit) 
-#         # ret, track_window = cv2.CamShift(dst, track_window, term_crit)
-#         # pts = cv2.boxPoints(ret)
-#         # pts = np.int0(pts)
-#         # img2 = cv2.polylines(frame,[pts],True, 255,2)
-#         x,y,w,h = track_window
-#         print(track_window)
-#         final_image = cv2.rectangle(frame,(x,y),(x+w,y+h),(0,0,255),2) 
-#         cv2.imshow('frame',final_image)
-#         k = cv2.waitKey(30) & 0xFF
-#         if k == 27:
-#             break
+  # Read first frame
+  success, frame = cap.read()
+  frame= cv2.resize(frame,(512,512))
+  # quit if unable to read the video file
+  if not success:
+    print('Failed to read video')
+    sys.exit(1)
 
- 
-# cap.release()
-# cv2.destroyAllWindows()
+  ## Select boxes
+  bboxes = []
+  colors = [] 
+
+  # OpenCV's selectROI function doesn't work for selecting multiple objects in Python
+  # So we will call this function in a loop till we are done selecting all objects
+  while True:
+    # draw bounding boxes over objects
+    # selectROI's default behaviour is to draw box starting from the center
+    # when from Center is set to false, you can draw box starting from top left corner
+    bbox = cv2.selectROI('MultiTracker', frame)
+    bboxes.append(bbox)
+    colors.append((randint(64, 255), randint(64, 255), randint(64, 255)))
+    print("Press q to quit selecting boxes and start tracking")
+    print("Press any other key to select next object")
+    k = cv2.waitKey(0) & 0xFF
+    if (k == 113):  # q is pressed
+      break
+  
+  print('Selected bounding boxes {}'.format(bboxes))
+
+  ## Initialize MultiTracker
+  # There are two ways you can initialize multitracker
+  # 1. tracker = cv2.MultiTracker("CSRT")
+  # All the trackers added to this multitracker
+  # will use CSRT algorithm as default
+  # 2. tracker = cv2.MultiTracker()
+  # No default algorithm specified
+
+  # Initialize MultiTracker with tracking algo
+  # Specify tracker type
+  
+  # Create MultiTracker object
+  multiTracker = cv2.MultiTracker_create()
+
+  # Initialize MultiTracker 
+  for bbox in bboxes:
+    multiTracker.add(createTrackerByName(trackerType), frame, bbox)
 
 
-import cv2 
-import numpy as np
-car_cascade = cv2.CascadeClassifier("./data/Haarcascades/haarcascade_car.xml")
+  # Process video and track objects
+  while cap.isOpened():
+    success, frame = cap.read()
+    frame=cv2.resize(frame,(512,512))
+    if not success:
+      break
+    
+    # get updated location of objects in subsequent frames
+    success, boxes = multiTracker.update(frame)
 
+    # draw tracked objects
+    for i, newbox in enumerate(boxes):
+      p1 = (int(newbox[0]), int(newbox[1]))
+      p2 = (int(newbox[0] + newbox[2]), int(newbox[1] + newbox[3]))
+      cv2.rectangle(frame, p1, p2, colors[i], 2, 1)
 
-cap = cv2.VideoCapture("./data/slow_traffic_small.mp4")
-# take the first frame of the video
-ret , frame = cap.read()
-g = cv2.cvtColor(frame,cv2.COLOR_BGR2GRAY)
-carss = car_cascade.detectMultiScale( g, 1.1, 1)
-# print(carss)
-for (x,y,w,h) in carss:
-    print(x,y,w,h)
+    # show frame
+    cv2.imshow('MultiTracker', frame)
     
 
-
-
-# track_window = carss[0] 
-# print(track_window)
-# x,y,width,height=  carss[0] 
-
-
-# roi = frame[y:y+height,x:x+width]
- 
-# hsv_roi = cv2.cvtColor(roi,cv2.COLOR_BGR2HSV)
-# mask = cv2.inRange(hsv_roi,np.array((0., 60., 32.)),np.array((180., 255., 255)))
-# roi_hist = cv2.calcHist([hsv_roi],[0],mask,[180],[0,180])
-# cv2.normalize(roi_hist, roi_hist,0,255, cv2.NORM_MINMAX)
-# term_crit = ( cv2.TERM_CRITERIA_EPS | cv2.TERM_CRITERIA_COUNT, 10, 1 )
-# cv2.imshow('roi',roi)
-# while(1):
-#     ret , frame = cap.read()
-#     if ret == True:
-#         # frame = cv2.resize(frame, 520,dsize=5)
-#         hsv = cv2.cvtColor(frame,cv2.COLOR_BGR2HSV) 
-#         dst = cv2.calcBackProject([hsv],[0],roi_hist,[0,180],1)
-#         ret, track_window = cv2.meanShift(dst, track_window, term_crit) 
-#         # ret, track_window = cv2.CamShift(dst, track_window, term_crit)
-#         # pts = cv2.boxPoints(ret)
-#         # pts = np.int0(pts)
-#         # img2 = cv2.polylines(frame,[pts],True, 255,2)
-#         x,y,w,h = track_window
-#         print(track_window)
-#         final_image = cv2.rectangle(frame,(x,y),(x+w,y+h),(0,0,255),2) 
-#         cv2.imshow('frame',final_image)
-#         k = cv2.waitKey(30) & 0xFF
-#         if k == 27:
-#             break
-
- 
-cap.release()
-cv2.destroyAllWindows()
+    # quit on ESC button
+    if cv2.waitKey(1) & 0xFF == 27:  # Esc pressed
+      break
